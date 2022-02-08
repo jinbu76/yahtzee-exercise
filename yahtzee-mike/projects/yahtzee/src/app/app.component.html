@@ -1,0 +1,127 @@
+<div class="container">
+  <div *ngIf="isLoaded" class="dices">
+    <div>
+      <ng-container #dice1container [ngTemplateOutlet]="templates[0]"></ng-container>
+    </div>
+    <div>
+      <ng-container #dice1container [ngTemplateOutlet]="templates[1]"></ng-container>
+    </div>
+    <div>
+      <ng-container #dice1container [ngTemplateOutlet]="templates[2]"></ng-container>
+    </div>
+    <div>
+      <ng-container #dice1container [ngTemplateOutlet]="templates[3]"></ng-container>
+    </div>
+    <div>
+      <ng-container #dice1container [ngTemplateOutlet]="templates[4]"></ng-container>
+    </div>
+    <button (click)="onRoll()" color="primary" mat-raised-button>Roll</button>
+  </div>
+
+
+  <div class="evaluation">
+    <table>
+      <thead>
+      <tr>
+        <td></td>
+        <td>Player 1</td>
+        <td>Player 2</td>
+      </tr>
+      </thead>
+
+      <tbody>
+      <tr *ngFor="let evaluation of evaluations">
+        <td>{{evaluation.name}}</td>
+        <ng-container *ngFor="let player of evaluation.players">
+          <td>{{player}}</td>
+        </ng-container>
+        <td>
+          <button color="primary" mat-raised-button>Select</button>
+        </td>
+      </tr>
+      </tbody>
+      <tfoot>
+      <td>Summary</td>
+      <td #player1Summary></td>
+      <td #player2Summary></td>
+      </tfoot>
+
+    </table>
+  </div>
+</div>
+
+<ng-template #zero>
+  <div class="dice"></div>
+</ng-template>
+
+<ng-template #one>
+  <div class="dice first-face">
+    <span class="dot">
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #two>
+  <div class="second-face dice">
+    <span class="dot">
+    </span>
+    <span class="dot">
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #three>
+  <div class="third-face dice">
+    <span class="dot"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+  </div>
+</ng-template>
+
+<ng-template #four>
+  <div class="fourth-face dice">
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+  </div>
+</ng-template>
+<ng-template #five>
+  <div class="fifth-face dice">
+
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+    <div class="column">
+      <span class="dot"></span>
+    </div>
+
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+  </div>
+</ng-template>
+<ng-template #six>
+  <div class="sixth-face dice">
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+    <div class="column">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+  </div>
+
+</ng-template>

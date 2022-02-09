@@ -5,9 +5,9 @@ import {
   ViewChild,
 } from '@angular/core';
 import { Constants } from '../common/constants';
-import {Evaluation} from './models/evaluation.interface';
-import { Dice } from './models/dice.interface';
-import {count} from "rxjs";
+import { Evaluation } from './models/evaluation.interface';
+import { IDice } from './models/dice.interface';
+import { GameService } from './services/game.service';
 
 @Component({
   selector: 'app-root',
@@ -32,7 +32,6 @@ export class AppComponent implements AfterViewInit {
 
   public evaluations: Evaluation[] = [];
 
-  public dices: Dice[] = [];
   public diceSelected: boolean[] = [];
   // @ts-ignore
   public templates: Array<TemplateRef<any>> = [];
@@ -42,7 +41,6 @@ export class AppComponent implements AfterViewInit {
   public summaryPlayersPoints: number[] = [];
   public activePlayer: number = 0;
   public countRoll: number = Constants.maxRolls;
-
   public stringToNumber: { [key: string]: number } = {
     ['Ones']: 1,
     ['Twos']: 2,
@@ -51,11 +49,12 @@ export class AppComponent implements AfterViewInit {
     ['Fives']: 5,
     ['Sixes']: 6,
   };
-
   public ofAKindToCount: { [key: string]: number } = {
     ['3 of a kind']: 3,
     ['4 of a kind']: 4,
   };
+
+  constructor(public gameService: GameService) {}
 
   ngAfterViewInit(): void {
     this.initialize();
@@ -64,13 +63,13 @@ export class AppComponent implements AfterViewInit {
 
   public onRoll(): void {
     for (let dice = 0; dice < Constants.maxDices; dice++) {
-      if (this.dices[dice].isSelected) continue;
+      if (this.gameService.isDiceSelected(dice)) continue;
 
       const min = Math.ceil(1);
       const max = Math.floor(6);
       const random = Math.floor(Math.random() * (max - min + 1)) + min;
 
-      this.dices[dice].value = random;
+      this.gameService.setDiceValue(dice, random);
 
       switch (random) {
         case 1:
@@ -100,31 +99,28 @@ export class AppComponent implements AfterViewInit {
   public disabledSelect(evaluation: Evaluation, activePlayer: number): boolean {
     return evaluation.isSelectDisabled[activePlayer];
   }
+
   public switchPlayer(): void {
     this.countRoll = Constants.maxRolls;
     this.activePlayer++;
     if (this.activePlayer === Constants.maxPlayer) {
       this.activePlayer = 0;
     }
-    this.dices.forEach((dice) => (dice.isSelected = false));
+    this.gameService.setAllDicesIsSelected(false);
 
-    this.evaluations.forEach(evaluation => {
+    this.evaluations.forEach((evaluation) => {
       if (evaluation.points[this.activePlayer] === 0) {
         evaluation.isSelectDisabled[this.activePlayer] = false;
       }
-
-    })
+    });
     this.onRoll();
   }
 
-  public selectDice(dice: Dice): void {
+  public selectDice(dice: IDice): void {
     dice.isSelected = !dice.isSelected;
   }
 
-  public swipeAway(evaluation: Evaluation, activePlayer: number): void {
-
-  }
-
+  public swipeAway(evaluation: Evaluation, activePlayer: number): void {}
 
   public restart() {
     const points: number[] = [];
@@ -135,27 +131,89 @@ export class AppComponent implements AfterViewInit {
     }
 
     this.evaluations = [
-      { name: 'Ones', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 1 },
-      { name: 'Twos', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 2 },
-      { name: 'Threes', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 3 },
-      { name: 'Fours', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 4 },
-      { name: 'Fives', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 5 },
-      { name: 'Sixes', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 6 },
-      { name: '3 of a kind', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: -1 },
-      { name: '4 of a kind', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: -1 },
-      { name: 'Small Straight', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 30 },
-      { name: 'Large Straight', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 40 },
-      { name: 'Full House', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 25 },
-      { name: 'Yahtzee', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: 50 },
-      { name: 'Chance', points: JSON.parse(JSON.stringify(points)), isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)), value: -1 },
+      {
+        name: 'Ones',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 1,
+      },
+      {
+        name: 'Twos',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 2,
+      },
+      {
+        name: 'Threes',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 3,
+      },
+      {
+        name: 'Fours',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 4,
+      },
+      {
+        name: 'Fives',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 5,
+      },
+      {
+        name: 'Sixes',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 6,
+      },
+      {
+        name: '3 of a kind',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: -1,
+      },
+      {
+        name: '4 of a kind',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: -1,
+      },
+      {
+        name: 'Small Straight',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 30,
+      },
+      {
+        name: 'Large Straight',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 40,
+      },
+      {
+        name: 'Full House',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 25,
+      },
+      {
+        name: 'Yahtzee',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: 50,
+      },
+      {
+        name: 'Chance',
+        points: JSON.parse(JSON.stringify(points)),
+        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
+        value: -1,
+      },
     ];
   }
 
   public setClass(index: number) {
-    const dice = this.dices[index];
-
-    if (!dice || !dice.isSelected) return '';
-
+    if (!this.gameService.checkValidSelectedDice(index)) return '';
     return 'selected';
   }
 
@@ -170,80 +228,60 @@ export class AppComponent implements AfterViewInit {
       case 'Fours':
       case 'Fives':
       case 'Sixes':
-        point = this.sumValues(this.stringToNumber[evaluationName]);
+        point = this.gameService.sumEqualsEyes(
+          this.stringToNumber[evaluationName]
+        );
         break;
 
       case '3 of a kind':
       case '4 of a kind':
-        const check = this.checkOfAKind(this.ofAKindToCount[evaluationName]);
+        const check = this.gameService.checkCountEqualsEyes(
+          this.ofAKindToCount[evaluationName]
+        );
         if (check) {
-          point = this.dices.reduce((sum, current) => sum + current.value, 0);
+          point = this.gameService.calculateAllEyes();
         }
         break;
 
-      case 'Small Straight': if (this.checkStraight('SMALL')) { point = 30 } break;
-      case 'Large Straight': if (this.checkStraight('LARGE')) { point = 40 } break;
+      case 'Small Straight':
+        if (this.checkStraight('SMALL')) {
+          point = evaluation.value;
+        }
+        break;
+      case 'Large Straight':
+        if (this.checkStraight('LARGE')) {
+          point = evaluation.value;
+        }
+        break;
 
       case 'Full House':
-        if (this.checkFullHouse()) point = evaluation.value;
+        if (this.gameService.checkFullHouse()) point = evaluation.value;
         break;
 
       case 'Yahtzee':
-        if (this.checkYahtzee()) point = evaluation.value;
+        if (this.gameService.checkYahtzee()) point = evaluation.value;
         break;
 
       case 'Chance':
-        point = this.dices.reduce((sum, current) => sum + current.value, 0);
+        point = this.gameService.calculateAllEyes();
         break;
     }
 
     if (point === 0) return;
 
     evaluation.points[playerNumber] = point;
-    this.evaluations.forEach(e => e.isSelectDisabled[this.activePlayer] = true);
+    this.evaluations.forEach(
+      (e) => (e.isSelectDisabled[this.activePlayer] = true)
+    );
 
     this.countRoll = 0;
     this.summaryPointsCalculator();
-
-  }
-
-  public checkFullHouse(): boolean {
-
-    const count: { [key:number]:number } = {};
-    for (const dice of this.dices) {
-
-      if (count[dice.value]) {
-        count[dice.value] += 1;
-      } else {
-        count[dice.value] = 1;
-      }
-    }
-
-    if (Object.keys(count).length === 2) return true;
-
-    return false;
-  }
-
-  public checkYahtzee(): boolean {
-
-    const count: { [key:number]:number } = {};
-    for (const dice of this.dices) {
-
-      if (count[dice.value]) {
-        count[dice.value] += 1;
-      } else {
-        count[dice.value] = 1;
-      }
-    }
-
-    if (Object.keys(count).length === 1) return true;
-    return false;
   }
 
   public initialize(): void {
     for (let countDices = 0; countDices < Constants.maxDices; countDices++) {
       this.templates[countDices] = this.zero;
-      this.dices[countDices] = { value: -1, isSelected: false };
+      this.gameService.initializeByIndex(countDices);
     }
 
     for (
@@ -262,14 +300,13 @@ export class AppComponent implements AfterViewInit {
   }
 
   private checkStraight(type: 'SMALL' | 'LARGE'): boolean {
-    const clone = JSON.parse(JSON.stringify(this.dices));
+    const clone = this.gameService.clone<IDice[]>(this.gameService.getDices());
 
-    clone.sort((a: Dice, b: Dice) => {
+    clone.sort((a: IDice, b: IDice) => {
       if (a.value > b.value) return 1;
       if (a.value < b.value) return -1;
       else return 0;
     });
-
 
     let countHit = 0;
     for (let index = 0; index < clone.length - 1; index++) {
@@ -284,27 +321,6 @@ export class AppComponent implements AfterViewInit {
     if (type === 'LARGE' && countHit === Constants.maxDices - 1) return true;
 
     return false;
-  }
-
-  private sumValues(value: number): number {
-    let sum: number = 0;
-
-    for (const dice of this.dices) {
-      if (dice.value === value) sum += value;
-    }
-    return sum;
-  }
-
-  private checkOfAKind(count: number): boolean {
-    let check: boolean = false;
-    for (let num = 1; num <= 6; num++) {
-      if (this.dices.filter((dice) => dice.value === num).length >= count) {
-        check = true;
-        break;
-      }
-    }
-
-    return check;
   }
 
   private summaryPointsCalculator(): void {

@@ -7,7 +7,7 @@
 
 
   <div  class="dices">
-    <ng-container *ngFor="let dice of dices; let i = index">
+    <ng-container *ngFor="let dice of gameService.getDices(); let i = index">
       <div (click)="selectDice(dice)" >
         <ng-container  *ngIf="dice" [ngTemplateOutlet]="templates[i]" [ngTemplateOutletContext]="{index: i}"   ></ng-container>
       </div>

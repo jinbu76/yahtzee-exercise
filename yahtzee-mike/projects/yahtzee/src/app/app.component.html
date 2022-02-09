@@ -29,15 +29,15 @@
       <tbody *ngIf="evaluations && evaluations.length">
       <tr *ngFor="let evaluation of evaluations">
         <td>{{evaluation.name}}</td>
-        <ng-container *ngFor="let player of evaluation.players">
-          <td>{{player.points}}</td>
+        <ng-container *ngFor="let points of evaluation.points">
+          <td>{{points}}</td>
         </ng-container>
         <td>
           <button color="primary" mat-raised-button (click)="addPoints(evaluation, activePlayer)" [disabled]="disabledSelect(evaluation, activePlayer)">Select</button>
 
         </td>
         <td>
-          <button color="primary" mat-raised-button *ngIf="!evaluation.players[activePlayer].isSelectedDisabled">Swipe away</button>
+          <button color="primary" mat-raised-button *ngIf="!evaluation.isSelectDisabled[activePlayer]">Swipe away</button>
         </td>
       </tr>
       </tbody>

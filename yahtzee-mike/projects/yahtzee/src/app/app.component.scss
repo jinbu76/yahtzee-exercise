@@ -3,6 +3,26 @@
   flex-direction: column;
   align-items: center;
 
+  table {
+    thead {
+      th { text-align: center; }
+    }
+    tbody {
+      td { width: 100px; text-align: center;}
+    }
+  }
+
+  table, th, td {
+    border: 1px solid black;
+    border-collapse: collapse;
+  }
+
+  button {
+    margin: 5px;
+  }
+
+
+
   .dices {
     display: flex;
     justify-content: center;
@@ -72,7 +92,12 @@
       }
     }
 
+    button {
+      margin-right: 10px;
+    }
 
-
+    .selected {
+      background-color: green;
+    }
   }
 }

@@ -1,4 +1,4 @@
-export interface Dice {
+export interface IDice {
   value: number;
   isSelected: boolean;
 }

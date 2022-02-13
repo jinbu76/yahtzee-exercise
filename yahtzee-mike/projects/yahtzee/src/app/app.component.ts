@@ -1,20 +1,25 @@
 import {
-  AfterViewInit,
   Component,
+  OnDestroy,
+  OnInit,
   TemplateRef,
   ViewChild,
 } from '@angular/core';
-import { Constants } from '../common/constants';
-import {Evaluation, PlayerValues} from './models/evaluationinterface';
-import { Dice } from './models/dice.interface';
-import {count} from "rxjs";
+import { Constants } from './common/constants';
+import { Evaluation } from './models/evaluation.interface';
+import { IDice } from './models/dice.interface';
+import { GameService } from './services/game.service';
+import { environment } from '../environments/environment';
+import { FormControl } from '@angular/forms';
+import { interval, Subscription } from 'rxjs';
+import { Player } from './models/player.interface';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent implements AfterViewInit {
+export class AppComponent implements OnInit, OnDestroy {
   // @ts-ignore
   @ViewChild('one') one: TemplateRef<any>;
   // @ts-ignore
@@ -32,8 +37,8 @@ export class AppComponent implements AfterViewInit {
 
   public evaluations: Evaluation[] = [];
 
-  public dices: Dice[] = [];
   public diceSelected: boolean[] = [];
+  public switchPlayerDisabled: boolean = true;
   // @ts-ignore
   public templates: Array<TemplateRef<any>> = [];
 
@@ -42,7 +47,6 @@ export class AppComponent implements AfterViewInit {
   public summaryPlayersPoints: number[] = [];
   public activePlayer: number = 0;
   public countRoll: number = Constants.maxRolls;
-
   public stringToNumber: { [key: string]: number } = {
     ['Ones']: 1,
     ['Twos']: 2,
@@ -51,26 +55,263 @@ export class AppComponent implements AfterViewInit {
     ['Fives']: 5,
     ['Sixes']: 6,
   };
-
   public ofAKindToCount: { [key: string]: number } = {
     ['3 of a kind']: 3,
     ['4 of a kind']: 4,
   };
 
-  ngAfterViewInit(): void {
-    this.initialize();
-    this.restart();
+  public maxPlayers: number = environment.maxPlayers;
+  public players: number[] = [];
+  public countPlayers: FormControl;
+
+  public subscription: Subscription = new Subscription();
+  public intervallSubscription: Subscription = new Subscription();
+  public playerSettings: boolean = false;
+
+  public gameOver: boolean = false;
+
+  public summaryPoints: number[] = [];
+  public isShake: boolean = true;
+
+  constructor(public gameService: GameService) {
+    this.countPlayers = new FormControl(this.maxPlayers.toString());
   }
 
-  public onRoll(): void {
+  ngOnInit(): void {
+    this.initialize();
+
+    this.subscription = this.countPlayers.valueChanges.subscribe((val) => {
+      this.maxPlayers = Number.parseInt(val);
+      this.ngOnInit();
+    });
+  }
+
+  ngOnDestroy(): void {
+    if (this.subscription) this.subscription.unsubscribe();
+  }
+
+  public onShakeRoll(): void {
+    if (this.isShake) {
+      this.intervallSubscription = interval(150).subscribe(() => this.setRandomDiceValues());
+    } else {
+      this.intervallSubscription.unsubscribe();
+      this.countRoll--;
+    }
+
+    this.isShake = !this.isShake;
+
+  }
+
+  public disabledSelect(evaluation: Evaluation): boolean {
+    return evaluation.players[this.activePlayer].isSelectDisabled;
+  }
+
+  public switchPlayer(): void {
+    this.countRoll = Constants.maxRolls;
+    this.activePlayer++;
+    if (this.activePlayer === this.maxPlayers) {
+      this.activePlayer = 0;
+    }
+    this.gameService.setAllDicesIsSelected(false);
+
+    this.evaluations.forEach((evaluation) => {
+      const player = evaluation.players[this.activePlayer];
+      if (player.point === 0 && player.isPlayable) {
+        evaluation.players[this.activePlayer].isSelectDisabled = false;
+      }
+    });
+    this.onShakeRoll();
+    this.switchPlayerDisabled = true;
+  }
+
+  public selectDice(dice: IDice): void {
+    dice.isSelected = !dice.isSelected;
+  }
+
+  public swipeAway(evaluation: Evaluation): void {
+    this.setPlayerPoints(evaluation, 0);
+    this.setGameOver();
+  }
+
+  getPlayerWinner(): string {
+    const maxPoint: number = Math.max(...this.summaryPlayersPoints);
+    const index: number = this.summaryPlayersPoints.indexOf(maxPoint) + 1;
+
+    return 'Player ' + index;
+  }
+
+  public setClass(index: number) {
+    if (!this.gameService.checkValidSelectedDice(index)) return '';
+    return 'selected';
+  }
+
+  public addPoints(evaluation: Evaluation): void {
+    const evaluationName: string = evaluation.name;
+
+    let point: number = 0;
+    switch (evaluationName) {
+      case 'Ones':
+      case 'Twos':
+      case 'Threes':
+      case 'Fours':
+      case 'Fives':
+      case 'Sixes':
+        point = this.gameService.sumEqualsEyes(
+          this.stringToNumber[evaluationName]
+        );
+        break;
+
+      case '3 of a kind':
+      case '4 of a kind':
+        const check = this.gameService.checkCountEqualsEyes(
+          this.ofAKindToCount[evaluationName]
+        );
+        if (check) {
+          point = this.gameService.calculateAllEyes();
+        }
+        break;
+
+      case 'Small Straight':
+        if (this.checkStraight('SMALL')) {
+          point = evaluation.value;
+        }
+        break;
+      case 'Large Straight':
+        if (this.checkStraight('LARGE')) {
+          point = evaluation.value;
+        }
+        break;
+
+      case 'Full House':
+        if (this.gameService.checkFullHouse()) point = evaluation.value;
+        break;
+
+      case 'Yahtzee':
+        if (this.gameService.checkYahtzee()) point = evaluation.value;
+        break;
+
+      case 'Chance':
+        point = this.gameService.calculateAllEyes();
+        break;
+    }
+
+    if (point === 0) return;
+
+    this.setPlayerPoints(evaluation, point);
+
+    this.countRoll = 0;
+    this.summaryPointsCalculator(point);
+
+    this.setGameOver();
+  }
+
+  public initialize(): void {
+    this.countRoll = Constants.maxRolls;
+    this.gameOver = false;
+    this.playerSettings = false;
+    this.countPlayers = new FormControl(this.maxPlayers.toString());
+
+    this.isLoaded = false;
+    this.switchPlayerDisabled = true;
+
+    for (let countDices = 0; countDices < Constants.maxDices; countDices++) {
+      this.templates[countDices] = this.zero;
+      this.gameService.initializeByIndex(countDices);
+    }
+
+    this.summaryPlayersPoints = [];
+    this.players = [];
+    const playersInitialize: Player[] = [];
+    for (let countPlayer = 0; countPlayer < this.maxPlayers; countPlayer++) {
+      this.players.push(countPlayer + 1);
+      this.summaryPlayersPoints.push(0);
+
+      const player: Player = {
+        point: 0,
+        isPlayable: true,
+        isSelectDisabled: false,
+      };
+      playersInitialize.push(player);
+    }
+
+    this.evaluations = [
+      {
+        name: 'Ones',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 1,
+      },
+      {
+        name: 'Twos',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 2,
+      },
+      {
+        name: 'Threes',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 3,
+      },
+      {
+        name: 'Fours',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 4,
+      },
+      {
+        name: 'Fives',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 5,
+      },
+      {
+        name: 'Sixes',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 6,
+      },
+      {
+        name: '3 of a kind',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+      {
+        name: '4 of a kind',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+      {
+        name: 'Small Straight',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 30,
+      },
+      {
+        name: 'Large Straight',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 40,
+      },
+      {
+        name: 'Full House',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 25,
+      },
+      {
+        name: 'Yahtzee',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 50,
+      },
+      {
+        name: 'Chance',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+    ];
+  }
+
+  private setRandomDiceValues() {
     for (let dice = 0; dice < Constants.maxDices; dice++) {
-      if (this.dices[dice].isSelected) continue;
+      if (this.gameService.isDiceSelected(dice)) continue;
 
       const min = Math.ceil(1);
       const max = Math.floor(6);
       const random = Math.floor(Math.random() * (max - min + 1)) + min;
 
-      this.dices[dice].value = random;
+      this.gameService.setDiceValue(dice, random);
 
       switch (random) {
         case 1:
@@ -93,184 +334,40 @@ export class AppComponent implements AfterViewInit {
           break;
       }
     }
-
-    this.countRoll--;
   }
 
-  public disabledSelect(evaluation: Evaluation, activePlayer: number): boolean {
-    return evaluation.players[activePlayer].isSelectedDisabled;
-  }
-  public switchPlayer(): void {
-    this.countRoll = Constants.maxRolls;
-    this.activePlayer++;
-    if (this.activePlayer === Constants.maxPlayer) {
-      this.activePlayer = 0;
-    }
-    this.dices.forEach((dice) => (dice.isSelected = false));
+  private setGameOver(): void {
+    let count = 0;
+    this.evaluations.forEach(
+      (evaluation) =>
+        (count += evaluation.players.filter(
+          (player) => player.isPlayable === true
+        ).length)
+    );
 
-    this.evaluations.forEach(evaluation => {
-      const player = evaluation.players[this.activePlayer];
-      if (player.points == 0) {
-        player.isSelectedDisabled = false;
-      }
-    })
-    this.onRoll();
+    this.gameOver = count === 0;
+    this.switchPlayerDisabled = this.gameOver;
   }
 
-  public selectDice(dice: Dice): void {
-    dice.isSelected = !dice.isSelected;
-  }
-
-  public swipeAway(evaluation: Evaluation, activePlayer: number): void {
-
-  }
-
-
-  public restart() {
-    const pvs: PlayerValues[] = [];
-    for (let player = 0; player < Constants.maxPlayer; player++) {
-      const pv: PlayerValues = { points: 0, isSelectedDisabled: false };
-      pvs.push(pv);
-    }
-    this.evaluations = [
-      { name: 'Ones', players: JSON.parse(JSON.stringify(pvs)), value: 1 },
-      { name: 'Twos', players: JSON.parse(JSON.stringify(pvs)), value: 2 },
-      { name: 'Threes', players: JSON.parse(JSON.stringify(pvs)), value: 3 },
-      { name: 'Fours', players: JSON.parse(JSON.stringify(pvs)), value: 4 },
-      { name: 'Fives', players: JSON.parse(JSON.stringify(pvs)), value: 5 },
-      { name: 'Sixes', players: JSON.parse(JSON.stringify(pvs)), value: 6 },
-      { name: '3 of a kind', players: JSON.parse(JSON.stringify(pvs)), value: -1 },
-      { name: '4 of a kind', players: JSON.parse(JSON.stringify(pvs)), value: -1 },
-      { name: 'Small Straight', players: JSON.parse(JSON.stringify(pvs)), value: 30 },
-      { name: 'Large Straight', players: JSON.parse(JSON.stringify(pvs)), value: 40 },
-      { name: 'Full House', players: JSON.parse(JSON.stringify(pvs)), value: 25 },
-      { name: 'Yahtzee', players: JSON.parse(JSON.stringify(pvs)), value: 50 },
-      { name: 'Chance', players: JSON.parse(JSON.stringify(pvs)), value: -1 },
-    ];
-  }
-
-  public setClass(index: number) {
-    const dice = this.dices[index];
-
-    if (!dice || !dice.isSelected) return '';
-
-    return 'selected';
-  }
-
-  public addPoints(evaluation: Evaluation, playerNumber: number): void {
-    const evaluationName: string = evaluation.name;
-
-    let point: number = 0;
-    switch (evaluationName) {
-      case 'Ones':
-      case 'Twos':
-      case 'Threes':
-      case 'Fours':
-      case 'Fives':
-      case 'Sixes':
-        point = this.sumValues(this.stringToNumber[evaluationName]);
-        break;
-
-      case '3 of a kind':
-      case '4 of a kind':
-        const check = this.checkOfAKind(this.ofAKindToCount[evaluationName]);
-        if (check) {
-          point = this.dices.reduce((sum, current) => sum + current.value, 0);
-        }
-        break;
-
-      case 'Small Straight': if (this.checkStraight('SMALL')) { point = 30 } break;
-      case 'Large Straight': if (this.checkStraight('LARGE')) { point = 40 } break;
-
-      case 'Full House':
-        if (this.checkFullHouse()) point = evaluation.value;
-        break;
-
-      case 'Yahtzee':
-        if (this.checkYahtzee()) point = evaluation.value;
-        break;
-
-      case 'Chance':
-        point = this.dices.reduce((sum, current) => sum + current.value, 0);
-        break;
-    }
-
-    if (point === 0) return;
-
-    evaluation.players[playerNumber].points = point;
-    // evaluation.players[playerNumber].isSelectedDisabled = true;
-    for (const ev of this.evaluations) {
-      ev.players[this.activePlayer].isSelectedDisabled = true;
-    }
-
-    this.countRoll = 0;
-    this.summaryPointsCalculator();
-
-  }
-
-  public checkFullHouse(): boolean {
-
-    const count: { [key:number]:number } = {};
-    for (const dice of this.dices) {
-
-      if (count[dice.value]) {
-        count[dice.value] += 1;
-      } else {
-        count[dice.value] = 1;
-      }
-    }
-
-    if (Object.keys(count).length === 2) return true;
-
-    return false;
-  }
-
-  public checkYahtzee(): boolean {
-
-    const count: { [key:number]:number } = {};
-    for (const dice of this.dices) {
-
-      if (count[dice.value]) {
-        count[dice.value] += 1;
-      } else {
-        count[dice.value] = 1;
-      }
-    }
-
-    if (Object.keys(count).length === 1) return true;
-    return false;
-  }
-
-  public initialize(): void {
-    for (let countDices = 0; countDices < Constants.maxDices; countDices++) {
-      this.templates[countDices] = this.zero;
-      this.dices[countDices] = { value: -1, isSelected: false };
-    }
-
-    for (
-      let countPlayers = 0;
-      countPlayers < Constants.maxPlayer;
-      countPlayers++
-    ) {
-      this.summaryPlayersPoints[countPlayers] = 0;
-    }
-
-    this.countRoll = Constants.maxRolls;
-
-    setTimeout(() => {
-      this.isLoaded = false;
-    }, 1000);
+  private setPlayerPoints(evaluation: Evaluation, point: number) {
+    evaluation.players[this.activePlayer] = {
+      point,
+      isPlayable: false,
+      isSelectDisabled: true,
+    };
+    this.evaluations.forEach(
+      (e) => (e.players[this.activePlayer].isSelectDisabled = true)
+    );
   }
 
   private checkStraight(type: 'SMALL' | 'LARGE'): boolean {
-    const clone = JSON.parse(JSON.stringify(this.dices));
+    const clone = this.gameService.clone<IDice[]>(this.gameService.getDices());
 
-    clone.sort((a: Dice, b: Dice) => {
+    clone.sort((a: IDice, b: IDice) => {
       if (a.value > b.value) return 1;
       if (a.value < b.value) return -1;
       else return 0;
     });
-
 
     let countHit = 0;
     for (let index = 0; index < clone.length - 1; index++) {
@@ -281,46 +378,18 @@ export class AppComponent implements AfterViewInit {
       }
     }
 
-    if (type === 'SMALL' && countHit === Constants.maxDices - 2) return true;
+    if (
+      type === 'SMALL' &&
+      (countHit === Constants.maxDices - 2 ||
+        countHit === Constants.maxDices - 1)
+    )
+      return true;
     if (type === 'LARGE' && countHit === Constants.maxDices - 1) return true;
 
     return false;
   }
 
-  private sumValues(value: number): number {
-    let sum: number = 0;
-
-    for (const dice of this.dices) {
-      if (dice.value === value) sum += value;
-    }
-    return sum;
-  }
-
-  private checkOfAKind(count: number): boolean {
-    let check: boolean = false;
-    for (let num = 1; num <= 6; num++) {
-      if (this.dices.filter((dice) => dice.value === num).length >= count) {
-        check = true;
-        break;
-      }
-    }
-
-    return check;
-  }
-
-  private summaryPointsCalculator(): void {
-    const summaryPoints: number[] = [0, 0];
-
-    for (const evaluation of this.evaluations) {
-      const playersPoints: number[] = evaluation.players.map(player => player.points);
-      for (
-        let countPlayer = 0;
-        countPlayer < playersPoints.length;
-        countPlayer++
-      ) {
-        summaryPoints[countPlayer] += playersPoints[countPlayer];
-      }
-    }
-    this.summaryPlayersPoints = summaryPoints;
+  private summaryPointsCalculator(points: number): void {
+    this.summaryPlayersPoints[this.activePlayer] += points;
   }
 }

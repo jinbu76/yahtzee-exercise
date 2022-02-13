@@ -1,20 +1,25 @@
 import {
-  AfterViewInit,
   Component,
+  OnDestroy,
+  OnInit,
   TemplateRef,
   ViewChild,
 } from '@angular/core';
-import { Constants } from '../common/constants';
+import { Constants } from './common/constants';
 import { Evaluation } from './models/evaluation.interface';
 import { IDice } from './models/dice.interface';
 import { GameService } from './services/game.service';
+import { environment } from '../environments/environment';
+import { FormControl } from '@angular/forms';
+import { interval, Subscription } from 'rxjs';
+import { Player } from './models/player.interface';
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
 })
-export class AppComponent implements AfterViewInit {
+export class AppComponent implements OnInit, OnDestroy {
   // @ts-ignore
   @ViewChild('one') one: TemplateRef<any>;
   // @ts-ignore
@@ -33,6 +38,7 @@ export class AppComponent implements AfterViewInit {
   public evaluations: Evaluation[] = [];
 
   public diceSelected: boolean[] = [];
+  public switchPlayerDisabled: boolean = true;
   // @ts-ignore
   public templates: Array<TemplateRef<any>> = [];
 
@@ -54,162 +60,84 @@ export class AppComponent implements AfterViewInit {
     ['4 of a kind']: 4,
   };
 
-  constructor(public gameService: GameService) {}
+  public maxPlayers: number = environment.maxPlayers;
+  public players: number[] = [];
+  public countPlayers: FormControl;
 
-  ngAfterViewInit(): void {
-    this.initialize();
-    this.restart();
+  public subscription: Subscription = new Subscription();
+  public intervallSubscription: Subscription = new Subscription();
+  public playerSettings: boolean = false;
+
+  public gameOver: boolean = false;
+
+  public summaryPoints: number[] = [];
+  public isShake: boolean = true;
+
+  constructor(public gameService: GameService) {
+    this.countPlayers = new FormControl(this.maxPlayers.toString());
   }
 
-  public onRoll(): void {
-    for (let dice = 0; dice < Constants.maxDices; dice++) {
-      if (this.gameService.isDiceSelected(dice)) continue;
+  ngOnInit(): void {
+    this.initialize();
 
-      const min = Math.ceil(1);
-      const max = Math.floor(6);
-      const random = Math.floor(Math.random() * (max - min + 1)) + min;
+    this.subscription = this.countPlayers.valueChanges.subscribe((val) => {
+      this.maxPlayers = Number.parseInt(val);
+      this.ngOnInit();
+    });
+  }
 
-      this.gameService.setDiceValue(dice, random);
+  ngOnDestroy(): void {
+    if (this.subscription) this.subscription.unsubscribe();
+  }
 
-      switch (random) {
-        case 1:
-          this.templates[dice] = this.one;
-          break;
-        case 2:
-          this.templates[dice] = this.two;
-          break;
-        case 3:
-          this.templates[dice] = this.three;
-          break;
-        case 4:
-          this.templates[dice] = this.four;
-          break;
-        case 5:
-          this.templates[dice] = this.five;
-          break;
-        case 6:
-          this.templates[dice] = this.six;
-          break;
-      }
+  public onShakeRoll(): void {
+    if (this.isShake) {
+      this.intervallSubscription = interval(150).subscribe(() => this.setRandomDiceValues());
+    } else {
+      this.intervallSubscription.unsubscribe();
+      this.countRoll--;
     }
 
-    this.countRoll--;
+    this.isShake = !this.isShake;
+
   }
 
-  public disabledSelect(evaluation: Evaluation, activePlayer: number): boolean {
-    return evaluation.isSelectDisabled[activePlayer];
+  public disabledSelect(evaluation: Evaluation): boolean {
+    return evaluation.players[this.activePlayer].isSelectDisabled;
   }
 
   public switchPlayer(): void {
     this.countRoll = Constants.maxRolls;
     this.activePlayer++;
-    if (this.activePlayer === Constants.maxPlayer) {
+    if (this.activePlayer === this.maxPlayers) {
       this.activePlayer = 0;
     }
     this.gameService.setAllDicesIsSelected(false);
 
     this.evaluations.forEach((evaluation) => {
-      if (evaluation.points[this.activePlayer] === 0) {
-        evaluation.isSelectDisabled[this.activePlayer] = false;
+      const player = evaluation.players[this.activePlayer];
+      if (player.point === 0 && player.isPlayable) {
+        evaluation.players[this.activePlayer].isSelectDisabled = false;
       }
     });
-    this.onRoll();
+    this.onShakeRoll();
+    this.switchPlayerDisabled = true;
   }
 
   public selectDice(dice: IDice): void {
     dice.isSelected = !dice.isSelected;
   }
 
-  public swipeAway(evaluation: Evaluation, activePlayer: number): void {}
+  public swipeAway(evaluation: Evaluation): void {
+    this.setPlayerPoints(evaluation, 0);
+    this.setGameOver();
+  }
 
-  public restart() {
-    const points: number[] = [];
-    const isSelectDisabled: boolean[] = [];
-    for (let player = 0; player < Constants.maxPlayer; player++) {
-      points.push(0);
-      isSelectDisabled.push(false);
-    }
+  getPlayerWinner(): string {
+    const maxPoint: number = Math.max(...this.summaryPlayersPoints);
+    const index: number = this.summaryPlayersPoints.indexOf(maxPoint) + 1;
 
-    this.evaluations = [
-      {
-        name: 'Ones',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 1,
-      },
-      {
-        name: 'Twos',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 2,
-      },
-      {
-        name: 'Threes',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 3,
-      },
-      {
-        name: 'Fours',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 4,
-      },
-      {
-        name: 'Fives',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 5,
-      },
-      {
-        name: 'Sixes',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 6,
-      },
-      {
-        name: '3 of a kind',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: -1,
-      },
-      {
-        name: '4 of a kind',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: -1,
-      },
-      {
-        name: 'Small Straight',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 30,
-      },
-      {
-        name: 'Large Straight',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 40,
-      },
-      {
-        name: 'Full House',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 25,
-      },
-      {
-        name: 'Yahtzee',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: 50,
-      },
-      {
-        name: 'Chance',
-        points: JSON.parse(JSON.stringify(points)),
-        isSelectDisabled: JSON.parse(JSON.stringify(isSelectDisabled)),
-        value: -1,
-      },
-    ];
+    return 'Player ' + index;
   }
 
   public setClass(index: number) {
@@ -217,7 +145,7 @@ export class AppComponent implements AfterViewInit {
     return 'selected';
   }
 
-  public addPoints(evaluation: Evaluation, playerNumber: number): void {
+  public addPoints(evaluation: Evaluation): void {
     const evaluationName: string = evaluation.name;
 
     let point: number = 0;
@@ -269,34 +197,167 @@ export class AppComponent implements AfterViewInit {
 
     if (point === 0) return;
 
-    evaluation.points[playerNumber] = point;
-    this.evaluations.forEach(
-      (e) => (e.isSelectDisabled[this.activePlayer] = true)
-    );
+    this.setPlayerPoints(evaluation, point);
 
     this.countRoll = 0;
-    this.summaryPointsCalculator();
+    this.summaryPointsCalculator(point);
+
+    this.setGameOver();
   }
 
   public initialize(): void {
+    this.countRoll = Constants.maxRolls;
+    this.gameOver = false;
+    this.playerSettings = false;
+    this.countPlayers = new FormControl(this.maxPlayers.toString());
+
+    this.isLoaded = false;
+    this.switchPlayerDisabled = true;
+
     for (let countDices = 0; countDices < Constants.maxDices; countDices++) {
       this.templates[countDices] = this.zero;
       this.gameService.initializeByIndex(countDices);
     }
 
-    for (
-      let countPlayers = 0;
-      countPlayers < Constants.maxPlayer;
-      countPlayers++
-    ) {
-      this.summaryPlayersPoints[countPlayers] = 0;
+    this.summaryPlayersPoints = [];
+    this.players = [];
+    const playersInitialize: Player[] = [];
+    for (let countPlayer = 0; countPlayer < this.maxPlayers; countPlayer++) {
+      this.players.push(countPlayer + 1);
+      this.summaryPlayersPoints.push(0);
+
+      const player: Player = {
+        point: 0,
+        isPlayable: true,
+        isSelectDisabled: false,
+      };
+      playersInitialize.push(player);
     }
 
-    this.countRoll = Constants.maxRolls;
+    this.evaluations = [
+      {
+        name: 'Ones',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 1,
+      },
+      {
+        name: 'Twos',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 2,
+      },
+      {
+        name: 'Threes',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 3,
+      },
+      {
+        name: 'Fours',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 4,
+      },
+      {
+        name: 'Fives',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 5,
+      },
+      {
+        name: 'Sixes',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 6,
+      },
+      {
+        name: '3 of a kind',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+      {
+        name: '4 of a kind',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+      {
+        name: 'Small Straight',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 30,
+      },
+      {
+        name: 'Large Straight',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 40,
+      },
+      {
+        name: 'Full House',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 25,
+      },
+      {
+        name: 'Yahtzee',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: 50,
+      },
+      {
+        name: 'Chance',
+        players: JSON.parse(JSON.stringify(playersInitialize)),
+        value: -1,
+      },
+    ];
+  }
 
-    setTimeout(() => {
-      this.isLoaded = false;
-    }, 1000);
+  private setRandomDiceValues() {
+    for (let dice = 0; dice < Constants.maxDices; dice++) {
+      if (this.gameService.isDiceSelected(dice)) continue;
+
+      const min = Math.ceil(1);
+      const max = Math.floor(6);
+      const random = Math.floor(Math.random() * (max - min + 1)) + min;
+
+      this.gameService.setDiceValue(dice, random);
+
+      switch (random) {
+        case 1:
+          this.templates[dice] = this.one;
+          break;
+        case 2:
+          this.templates[dice] = this.two;
+          break;
+        case 3:
+          this.templates[dice] = this.three;
+          break;
+        case 4:
+          this.templates[dice] = this.four;
+          break;
+        case 5:
+          this.templates[dice] = this.five;
+          break;
+        case 6:
+          this.templates[dice] = this.six;
+          break;
+      }
+    }
+  }
+
+  private setGameOver(): void {
+    let count = 0;
+    this.evaluations.forEach(
+      (evaluation) =>
+        (count += evaluation.players.filter(
+          (player) => player.isPlayable === true
+        ).length)
+    );
+
+    this.gameOver = count === 0;
+    this.switchPlayerDisabled = this.gameOver;
+  }
+
+  private setPlayerPoints(evaluation: Evaluation, point: number) {
+    evaluation.players[this.activePlayer] = {
+      point,
+      isPlayable: false,
+      isSelectDisabled: true,
+    };
+    this.evaluations.forEach(
+      (e) => (e.players[this.activePlayer].isSelectDisabled = true)
+    );
   }
 
   private checkStraight(type: 'SMALL' | 'LARGE'): boolean {
@@ -317,25 +378,18 @@ export class AppComponent implements AfterViewInit {
       }
     }
 
-    if (type === 'SMALL' && countHit === Constants.maxDices - 2) return true;
+    if (
+      type === 'SMALL' &&
+      (countHit === Constants.maxDices - 2 ||
+        countHit === Constants.maxDices - 1)
+    )
+      return true;
     if (type === 'LARGE' && countHit === Constants.maxDices - 1) return true;
 
     return false;
   }
 
-  private summaryPointsCalculator(): void {
-    const summaryPoints: number[] = [];
-    for (let player = 0; player < Constants.maxPlayer; player++) {
-      summaryPoints.push(0);
-    }
-
-    for (let points = 0; points < this.evaluations.length; points++) {
-      const playerPoints = this.evaluations[points].points;
-      for (let player = 0; player < Constants.maxPlayer; player++) {
-        summaryPoints[player] += playerPoints[player];
-      }
-    }
-
-    this.summaryPlayersPoints = summaryPoints;
+  private summaryPointsCalculator(points: number): void {
+    this.summaryPlayersPoints[this.activePlayer] += points;
   }
 }

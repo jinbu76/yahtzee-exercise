@@ -1,4 +1,4 @@
-<div class="container" *ngIf="!isLoaded">
+<div *ngIf="!isLoaded" class="container">
 
   <div class="header">
     <h3>Player {{activePlayer + 1}}</h3>
@@ -6,12 +6,24 @@
   </div>
 
 
-  <div  class="dices">
+  <div class="dices" *ngIf="!gameOver && playerSettings">
     <ng-container *ngFor="let dice of gameService.getDices(); let i = index">
-      <div (click)="selectDice(dice)" >
-        <ng-container  *ngIf="dice" [ngTemplateOutlet]="templates[i]" [ngTemplateOutletContext]="{index: i}"   ></ng-container>
+      <div (click)="selectDice(dice)">
+        <ng-container *ngIf="dice" [ngTemplateOutletContext]="{index: i}"
+                      [ngTemplateOutlet]="templates[i]"></ng-container>
       </div>
     </ng-container>
+  </div>
+
+  <div class="" *ngIf="!playerSettings">
+    <mat-form-field>
+      <input type="number" matInput placeholder="Count players?" [formControl]="countPlayers" />
+    </mat-form-field>
+    <button color="primary" mat-raised-button (click)="playerSettings = !playerSettings">Set</button>
+  </div>
+
+  <div *ngIf="playerSettings && gameOver">
+    <h2>Winner is: {{getPlayerWinner()}}</h2>
   </div>
 
   <div class="evaluation">
@@ -19,8 +31,8 @@
       <thead>
       <tr>
         <th></th>
-        <th>Player 1</th>
-        <th>Player 2</th>
+        <th *ngFor="let player of players;">Player {{player}}</th>
+
         <th></th>
         <th></th>
       </tr>
@@ -29,32 +41,40 @@
       <tbody *ngIf="evaluations && evaluations.length">
       <tr *ngFor="let evaluation of evaluations">
         <td>{{evaluation.name}}</td>
-        <ng-container *ngFor="let points of evaluation.points">
-          <td>{{points}}</td>
+        <ng-container *ngFor="let player of evaluation.players">
+          <td>{{player.point}}</td>
         </ng-container>
         <td>
-          <button color="primary" mat-raised-button (click)="addPoints(evaluation, activePlayer)" [disabled]="disabledSelect(evaluation, activePlayer)">Select</button>
+          <button (click)="addPoints(evaluation)" [disabled]="disabledSelect(evaluation)" color="primary"
+                  mat-raised-button>Select
+          </button>
 
         </td>
         <td>
-          <button color="primary" mat-raised-button *ngIf="!evaluation.isSelectDisabled[activePlayer]">Swipe away</button>
+          <button (click)="swipeAway(evaluation)" *ngIf="!evaluation.players[activePlayer].isSelectDisabled" color="primary"
+                  mat-raised-button>Swipe away
+          </button>
         </td>
       </tr>
       </tbody>
       <tfoot>
-      <td>Summary</td>
-      <ng-container *ngFor="let summaryPlayerPoint of summaryPlayersPoints">
-        <td>{{summaryPlayerPoint}}</td>
-      </ng-container>
+      <tr>
+        <td>Summary</td>
+        <ng-container *ngFor="let summaryPlayerPoint of summaryPlayersPoints">
+          <td>{{summaryPlayerPoint}}</td>
+        </ng-container>
+        <td></td>
+        <td></td>
+      </tr>
       </tfoot>
 
     </table>
   </div>
 
   <div class="footer">
-    <button (click)="onRoll()" color="primary" mat-raised-button [disabled]="countRoll === 0">Roll</button>
-    <button (click)="switchPlayer()" mat-raised-button color="primary" >Switch Player</button>
-    <button (click)="restart(); initialize();" mat-raised-button color="primary" >Restart</button>
+    <button (click)="onShakeRoll()" [disabled]="countRoll === 0 ||!playerSettings" color="primary" mat-raised-button> {{isShake ? 'Shake' : 'Roll'}}</button>
+    <button (click)="switchPlayer()" color="primary" mat-raised-button [disabled]="switchPlayerDisabled">Switch Player</button>
+    <button (click)="initialize();" color="primary" mat-raised-button>Restart</button>
   </div>
 
 
@@ -65,14 +85,14 @@
 </ng-template>
 
 <ng-template #one let-index="index">
-  <div class="dice first-face" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="dice first-face">
     <span class="dot">
     </span>
   </div>
 </ng-template>
 
 <ng-template #two let-index="index">
-  <div class="second-face dice" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="second-face dice">
     <span class="dot">
     </span>
     <span class="dot">
@@ -81,7 +101,7 @@
 </ng-template>
 
 <ng-template #three let-index="index">
-  <div class="third-face dice" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="third-face dice">
     <span class="dot"></span>
     <span class="dot"></span>
     <span class="dot"></span>
@@ -89,7 +109,7 @@
 </ng-template>
 
 <ng-template #four let-index="index">
-  <div class="fourth-face dice" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="fourth-face dice">
     <div class="column">
       <span class="dot"></span>
       <span class="dot"></span>
@@ -101,7 +121,7 @@
   </div>
 </ng-template>
 <ng-template #five let-index="index">
-  <div class="fifth-face dice" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="fifth-face dice">
 
 
     <div class="column">
@@ -121,7 +141,7 @@
   </div>
 </ng-template>
 <ng-template #six let-index="index">
-  <div class="sixth-face dice" [ngClass]="setClass(index)">
+  <div [ngClass]="setClass(index)" class="sixth-face dice">
     <div class="column">
       <span class="dot"></span>
       <span class="dot"></span>

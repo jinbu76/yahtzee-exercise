@@ -1,6 +1,9 @@
+import {Player} from "./player.interface";
+
 export interface Evaluation {
   name: string;
-  points: number[];
-  isSelectDisabled: boolean[];
+  players: Player[];
   value: number;
 }
+
+

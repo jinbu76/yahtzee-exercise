@@ -70,7 +70,6 @@ export class GameService {
   }
 
   private countSingleQuantity(): number {
-    // TODO: check with an number[]
     const count: { [key: number]: number } = {};
     for (const dice of this.dices) {
       if (count[dice.value]) {
